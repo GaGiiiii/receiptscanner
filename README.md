@@ -39,32 +39,12 @@ Orbit Bombone - 60 RSD
 
 ## Cross-device sync
 
-Your catalog syncs across devices with a **sync code** (Firebase Firestore — the *same* project as the travel app, in a separate `receiptcatalogs` collection):
+Your catalog syncs across devices with a **sync code** (Firebase Firestore):
 
 - Open **My item list → Create sync code** on one device, then enter that code on another to pair them. Edits sync both ways in real time (last write wins).
 - The device that *creates* the code seeds the shared catalog; a device that *joins* replaces its local catalog with the shared one.
 
-**Required Firestore rules** (publish in the Firebase console — this is the combined rule set covering both apps that share the project):
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /syncs/{code} {
-      allow read: if code.matches('[A-Z2-9]{8}');
-      allow write: if code.matches('[A-Z2-9]{8}')
-                   && request.resource.data.lists is list
-                   && request.resource.data.size() < 100;
-    }
-    match /receiptcatalogs/{code} {
-      allow read: if code.matches('[A-Z2-9]{8}');
-      allow write: if code.matches('[A-Z2-9]{8}')
-                   && request.resource.data.catalog is list
-                   && request.resource.data.size() < 100;
-    }
-  }
-}
-```
+To point it at your own backend, paste your `firebaseConfig` into the marked block in `index.html` and add Firestore security rules that restrict reads/writes to your sync-code documents.
 
 ## API key & privacy
 
@@ -96,6 +76,6 @@ python3 -m http.server 8000
 ## Tech
 
 - [Anthropic Claude API](https://docs.claude.com/) — vision reading + catalog matching (structured JSON output)
-- [Firebase Firestore](https://firebase.google.com/docs/firestore) — sync-code catalog sync (shared project with the travel app)
+- [Firebase Firestore](https://firebase.google.com/docs/firestore) — sync-code catalog sync
 - [Bootstrap 5](https://getbootstrap.com/) — layout
 - [Font Awesome](https://fontawesome.com/) — icons
