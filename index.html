@@ -243,8 +243,9 @@
 
     <script>
         // ---- config ----
-        const MODEL = 'claude-haiku-4-5';   // swap to 'claude-opus-4-8' for max accuracy
-        const MAX_EDGE = 1600;
+        const MODEL = 'claude-haiku-4-5';   // swap to 'claude-sonnet-5' / 'claude-opus-4-8' for max accuracy
+        const MAX_EDGE = 1568;              // Haiku's max image edge — avoids a second server-side downscale
+        const JPEG_QUALITY = 0.92;          // higher = sharper text; token cost is dimension-based, so this is free
 
         // ---- state ----
         let catalog = loadCatalog();        // [{ id, name, aliases: [lowercased] }]
@@ -319,7 +320,7 @@
                     const canvas = document.createElement('canvas');
                     canvas.width = width; canvas.height = height;
                     canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                    resolve({ media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] });
+                    resolve({ media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1] });
                 };
                 img.onerror = () => reject(new Error('Could not read the image.'));
                 img.src = URL.createObjectURL(file);
@@ -360,7 +361,7 @@
 Extract every purchased line item. For each item return:
 - "raw": the item text exactly as printed on the receipt.
 - "name": match the item to ONE canonical name from the catalog below, using the names, their aliases, AND meaning (e.g. "Orbit strong mints" and "Orbit mints" both mean "Orbit Bombone"). Copy the catalog name EXACTLY as written. If nothing in the catalog fits, set "name" to null.
-- "weight": the size/weight if present (e.g. "150g", "1kg", "0.5l"), else null.
+- "weight": the size/weight if present, else null. Always use LOWERCASE units (g, kg, mg, ml, l, cl, dl) — e.g. "150g", "1kg", "0.5l".
 - "unitPrice": the price of a SINGLE unit of the item, as a number in dinars (no currency text). If the receipt only shows a line total for several units, divide by the quantity to get the per-unit price. Null if unknown.
 - "quantity": how many units of the item were bought, as an integer (default 1).
 
@@ -411,7 +412,7 @@ ${catalogForPrompt()}`;
                 try { parsed = JSON.parse(text); } catch { throw new Error('Could not parse the model response.'); }
                 lastScan = (parsed.items || []).map(i => ({
                     raw: i.raw || '', name: i.name || null,
-                    weight: i.weight || null,
+                    weight: normalizeWeight(i.weight),
                     unitPrice: (i.unitPrice === 0 || i.unitPrice) ? i.unitPrice : null,
                     quantity: i.quantity && i.quantity > 1 ? Math.round(i.quantity) : 1
                 }));
@@ -585,6 +586,10 @@ ${catalogForPrompt()}`;
         }
 
         // ================= helpers =================
+        function normalizeWeight(w) {
+            if (!w) return null;
+            return w.replace(/\b(mg|kg|g|cl|dl|ml|l)\b/gi, m => m.toLowerCase()).trim() || null;
+        }
         function cleanName(raw) {
             return (raw || '').replace(/\d+\s?(g|kg|ml|l|kom|x)\b/gi, ' ').replace(/[×x*]/g, ' ')
                 .replace(/\s+/g, ' ').trim();
