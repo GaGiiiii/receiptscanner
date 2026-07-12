@@ -1,16 +1,19 @@
 # Receipt Scanner
 
-A simple, single-file receipt-reading web app. Vanilla JavaScript + Bootstrap 5, no build step — everything lives in `index.html`. Hosted as a static site on GitHub Pages. It takes a receipt photo (upload or camera) and uses **Claude vision** to list each item and its price in a copyable text box. Nothing is uploaded to any server of ours or saved anywhere.
+A simple, single-file receipt-reading web app. Vanilla JavaScript + Bootstrap 5, no build step — everything lives in `index.html`. Hosted as a static site on GitHub Pages. It takes a receipt photo (upload or camera), uses **Claude vision** to read it, and **matches each line against your personal item catalog** — printing only allowed items under your own custom names. Receipts themselves are never stored.
 
 **Live app:** <https://gagiiiii.github.io/receiptscanner/>
 
 ## Features
 
 - **Two ways to add a receipt** — **Upload** an image file, or use the **Camera** (opens the rear camera on phones via `capture="environment"`).
-- **Claude vision reading** — the image is sent directly from your browser to the Anthropic API, which reads receipts far more accurately than on-device OCR and returns clean `item — price` lines.
-- **Editable result** — the output lands in a textarea you can tweak before copying.
-- **One-tap copy** — copy the whole list to the clipboard.
-- **Cost-aware** — images are downscaled to ~1600px in the browser before sending, keeping token usage (and cost) low.
+- **Claude vision + catalog matching** — the image *and your catalog* are sent to Claude, which reads each line and maps it to one of your canonical names semantically (e.g. `Orbit strong mints` and `Orbit mints` → `Orbit Bombone`), returning structured JSON.
+- **Custom names & aliases** — you define the name each item should print as. Every scanned variant is learned as an alias, so future scans auto-match.
+- **Output format** — matched items print as `Custom Name Weight - Price RSD`, e.g. `Jaffa Keks 150g - 200 RSD` (weight omitted when the receipt has none).
+- **Reconcile unmatched** — anything not in your catalog is listed with a choice: match it to an existing item, or add it as a new one. Either way it's remembered.
+- **Catalog manager** — view/rename/delete items and aliases, or add items manually.
+- **Cross-device sync** — a sync code keeps your catalog live on phone and desktop (Firebase, same project as the travel app, separate `receiptcatalogs` collection).
+- **Editable result + one-tap copy**, and images downscaled to ~1600px to keep token cost low.
 
 ## API key & privacy
 
