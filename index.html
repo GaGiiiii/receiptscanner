@@ -54,7 +54,7 @@
             font-family: 'SFMono-Regular', Consolas, monospace;
             font-size: 0.95rem;
             resize: vertical;
-            min-height: 220px;
+            min-height: 200px;
         }
 
         .copy-btn {
@@ -74,9 +74,42 @@
             color: #8a909a;
         }
 
-        .key-row .form-control {
+        .form-control,
+        .form-select {
             border-radius: 10px;
             font-size: 0.9rem;
+        }
+
+        .unmatched-row {
+            border: 1px solid #ffe0b2;
+            background: #fff8ef;
+            border-radius: 12px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+
+        .cat-item {
+            border-bottom: 1px solid #eef0f3;
+            padding: 8px 0;
+        }
+
+        .cat-item:last-child {
+            border-bottom: none;
+        }
+
+        .alias-chip {
+            display: inline-block;
+            background: #eef2f7;
+            border-radius: 999px;
+            padding: 1px 8px;
+            font-size: 0.72rem;
+            color: #5a6472;
+            margin: 2px 3px 0 0;
+        }
+
+        .section-toggle {
+            cursor: pointer;
+            user-select: none;
         }
 
         .spinner-border-sm {
@@ -87,21 +120,34 @@
         .hidden {
             display: none !important;
         }
+
+        .sync-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            background: #c4c9d0;
+        }
+
+        .sync-dot.on {
+            background: #28a745;
+        }
     </style>
 </head>
 
 <body>
     <div class="container py-4" style="max-width: 640px;">
         <h1 class="app-title text-center mb-1"><i class="fa-solid fa-receipt me-2"></i>Receipt Scanner</h1>
-        <p class="text-center muted-help mb-4">Upload or snap a receipt — items and prices appear below. Nothing is
-            saved.</p>
+        <p class="text-center muted-help mb-4">Snap a receipt — matched items print below in your own names. Receipts
+            are never stored.</p>
 
         <!-- API key -->
         <div class="card p-3 mb-3">
             <label class="muted-help mb-1"><i class="fa-solid fa-key me-1"></i>Anthropic API key</label>
-            <div class="input-group key-row">
-                <input type="password" id="apiKey" class="form-control" placeholder="sk-ant-…"
-                    autocomplete="off" spellcheck="false">
+            <div class="input-group">
+                <input type="password" id="apiKey" class="form-control" placeholder="sk-ant-…" autocomplete="off"
+                    spellcheck="false">
                 <button class="btn btn-outline-secondary" type="button" onclick="toggleKey()" title="Show/hide">
                     <i id="keyEye" class="fa-regular fa-eye"></i>
                 </button>
@@ -109,8 +155,7 @@
                     <i id="keySave" class="fa-regular fa-floppy-disk"></i>
                 </button>
             </div>
-            <div class="muted-help mt-2">Kept only in this browser. Nothing is sent anywhere except directly to
-                Anthropic when you scan.</div>
+            <div class="muted-help mt-2">Kept only in this browser; sent only to Anthropic when you scan.</div>
         </div>
 
         <!-- Inputs -->
@@ -137,66 +182,132 @@
             <button id="scanBtn" class="btn btn-success action-btn w-100 mt-3 hidden" onclick="runScan()">
                 <i class="fa-solid fa-magnifying-glass me-2"></i>Scan receipt
             </button>
+            <div id="scanError" class="text-danger muted-help mt-2 hidden"></div>
         </div>
 
         <!-- Result -->
-        <div id="resultCard" class="card p-3 hidden">
+        <div id="resultCard" class="card p-3 mb-3 hidden">
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <strong>Items</strong>
+                <strong>Matched items</strong>
                 <button class="copy-btn" title="Copy" onclick="copyResult()">
                     <i class="fa-regular fa-copy"></i> <span id="copyLabel">Copy</span>
                 </button>
             </div>
             <textarea id="result" class="form-control result" spellcheck="false"
-                placeholder="Scanned items will appear here…"></textarea>
-            <div class="muted-help mt-2">You can edit the text above before copying.</div>
+                placeholder="Matched items will appear here…"></textarea>
+            <div class="muted-help mt-2">Editable. Reconcile any unmatched items first, then copy.</div>
+        </div>
+
+        <!-- Unmatched / reconcile -->
+        <div id="unmatchedCard" class="card p-3 mb-3 hidden">
+            <strong class="d-block mb-1"><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Unmatched
+                items</strong>
+            <div class="muted-help mb-3">Match each to an item in your list, or add it as a new one. Your choice is
+                remembered for next time.</div>
+            <div id="unmatchedList"></div>
+        </div>
+
+        <!-- Catalog manager -->
+        <div class="card p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center section-toggle" onclick="toggleCatalog()">
+                <strong><i class="fa-solid fa-list-check me-1"></i>My item list (<span id="catCount">0</span>)</strong>
+                <i id="catChevron" class="fa-solid fa-chevron-down text-muted"></i>
+            </div>
+            <div id="catalogBody" class="mt-3 hidden">
+                <div class="input-group mb-3">
+                    <input type="text" id="newItemName" class="form-control" placeholder="Add item, e.g. Orbit Bombone">
+                    <button class="btn btn-outline-primary" type="button" onclick="addItemManual()">Add</button>
+                </div>
+                <div id="catalogList"></div>
+
+                <hr class="my-3">
+
+                <!-- Sync -->
+                <div class="d-flex align-items-center mb-2">
+                    <span id="syncDot" class="sync-dot"></span>
+                    <span id="syncStatus" class="muted-help">Sync unavailable</span>
+                </div>
+                <div id="syncControls" class="d-flex gap-2 flex-wrap hidden">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="createCode()">Create sync code</button>
+                    <div class="input-group input-group-sm" style="max-width: 220px;">
+                        <input type="text" id="joinCode" class="form-control" placeholder="Enter code" maxlength="8"
+                            style="text-transform:uppercase">
+                        <button class="btn btn-outline-secondary" onclick="joinCode()">Join</button>
+                    </div>
+                    <button id="disconnectBtn" class="btn btn-sm btn-outline-danger hidden"
+                        onclick="disconnectSync()">Disconnect</button>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // Cheapest capable vision model. Swap to "claude-opus-4-8" for max accuracy.
-        const MODEL = 'claude-haiku-4-5';
-        const MAX_EDGE = 1600; // downscale longest edge to keep token cost low
+        // ---- config ----
+        const MODEL = 'claude-haiku-4-5';   // swap to 'claude-opus-4-8' for max accuracy
+        const MAX_EDGE = 1600;
 
+        // ---- state ----
+        let catalog = loadCatalog();        // [{ id, name, aliases: [lowercased] }]
+        let lastScan = [];                  // [{ raw, name|null, weight|null, price|null }]
+
+        // ---- elements ----
         const apiKey = document.getElementById('apiKey');
         const fileInput = document.getElementById('fileInput');
         const cameraInput = document.getElementById('cameraInput');
         const preview = document.getElementById('preview');
         const scanBtn = document.getElementById('scanBtn');
+        const scanError = document.getElementById('scanError');
         const resultCard = document.getElementById('resultCard');
         const result = document.getElementById('result');
+        const unmatchedCard = document.getElementById('unmatchedCard');
+        const unmatchedList = document.getElementById('unmatchedList');
 
         let currentFile = null;
-
-        // restore saved key
         apiKey.value = localStorage.getItem('anthropic_api_key') || '';
 
+        // ================= catalog persistence =================
+        function loadCatalog() {
+            try { return JSON.parse(localStorage.getItem('receipt_catalog')) || []; }
+            catch { return []; }
+        }
+        function persist(pushRemote = true) {
+            localStorage.setItem('receipt_catalog', JSON.stringify(catalog));
+            if (pushRemote && window.__cloud) window.__cloud.push(catalog);
+            renderCatalog();
+        }
+        function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+        // bridge for the Firebase module
+        window.__getLocalCatalog = () => catalog;
+        window.__applyRemoteCatalog = (remote) => {
+            if (Array.isArray(remote)) { catalog = remote; persist(false); }
+        };
+
+        // ================= key handling =================
         function saveKey() {
             localStorage.setItem('anthropic_api_key', apiKey.value.trim());
             const icon = document.getElementById('keySave');
             icon.className = 'fa-solid fa-check text-success';
             setTimeout(() => icon.className = 'fa-regular fa-floppy-disk', 1500);
         }
-
         function toggleKey() {
             const showing = apiKey.type === 'text';
             apiKey.type = showing ? 'password' : 'text';
             document.getElementById('keyEye').className = showing ? 'fa-regular fa-eye' : 'fa-regular fa-eye-slash';
         }
 
+        // ================= image handling =================
         function loadImage(file) {
             if (!file) return;
             currentFile = file;
             preview.src = URL.createObjectURL(file);
             preview.style.display = 'block';
             scanBtn.classList.remove('hidden');
-            resultCard.classList.add('hidden');
+            scanError.classList.add('hidden');
         }
-
         fileInput.addEventListener('change', e => loadImage(e.target.files[0]));
         cameraInput.addEventListener('change', e => loadImage(e.target.files[0]));
 
-        // Downscale + re-encode as JPEG, return { media_type, data } with base64 (no prefix).
         function toBase64Image(file) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -206,27 +317,62 @@
                     width = Math.round(width * scale);
                     height = Math.round(height * scale);
                     const canvas = document.createElement('canvas');
-                    canvas.width = width;
-                    canvas.height = height;
+                    canvas.width = width; canvas.height = height;
                     canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-                    resolve({ media_type: 'image/jpeg', data: dataUrl.split(',')[1] });
+                    resolve({ media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] });
                 };
                 img.onerror = () => reject(new Error('Could not read the image.'));
                 img.src = URL.createObjectURL(file);
             });
         }
 
-        const PROMPT = `This image is a shopping receipt. List every purchased line item with its price.
-Output one item per line in the format:  item name<TAB>price
-- Keep the currency and decimal format exactly as printed on the receipt.
-- Do not add a header, totals, tax, store info, or any commentary.
-- If the receipt is unreadable, reply only with: (could not read receipt)`;
+        // ================= scanning =================
+        function catalogForPrompt() {
+            if (!catalog.length) return '(the catalog is currently empty — set every item\'s name to null)';
+            return catalog.map(it => {
+                const a = it.aliases && it.aliases.length ? `  (aliases: ${it.aliases.join(', ')})` : '';
+                return `- ${it.name}${a}`;
+            }).join('\n');
+        }
+
+        const SCHEMA = {
+            type: 'object', additionalProperties: false, required: ['items'],
+            properties: {
+                items: {
+                    type: 'array',
+                    items: {
+                        type: 'object', additionalProperties: false,
+                        required: ['raw', 'name', 'weight', 'price'],
+                        properties: {
+                            raw: { type: 'string' },
+                            name: { type: ['string', 'null'] },
+                            weight: { type: ['string', 'null'] },
+                            price: { type: ['number', 'null'] }
+                        }
+                    }
+                }
+            }
+        };
+
+        function buildPrompt() {
+            return `This image is a shopping receipt (likely Serbian, prices in RSD/dinars).
+Extract every purchased line item. For each item return:
+- "raw": the item text exactly as printed on the receipt.
+- "name": match the item to ONE canonical name from the catalog below, using the names, their aliases, AND meaning (e.g. "Orbit strong mints" and "Orbit mints" both mean "Orbit Bombone"). Copy the catalog name EXACTLY as written. If nothing in the catalog fits, set "name" to null.
+- "weight": the size/weight if present (e.g. "150g", "1kg", "0.5l"), else null.
+- "price": the line total for that item, as a number in dinars (no currency text), else null.
+
+Only match to a name that is actually in the catalog. Do not invent catalog names. Ignore totals, tax, change, and store info.
+
+CATALOG:
+${catalogForPrompt()}`;
+        }
 
         async function runScan() {
             const key = apiKey.value.trim();
-            if (!key) { alert('Enter your Anthropic API key first.'); return; }
+            if (!key) { showScanError('Enter your Anthropic API key first.'); return; }
             if (!currentFile) return;
+            scanError.classList.add('hidden');
 
             scanBtn.disabled = true;
             const original = scanBtn.innerHTML;
@@ -244,49 +390,336 @@ Output one item per line in the format:  item name<TAB>price
                     },
                     body: JSON.stringify({
                         model: MODEL,
-                        max_tokens: 1024,
+                        max_tokens: 1500,
+                        output_config: { format: { type: 'json_schema', schema: SCHEMA } },
                         messages: [{
                             role: 'user',
                             content: [
                                 { type: 'image', source: { type: 'base64', media_type: image.media_type, data: image.data } },
-                                { type: 'text', text: PROMPT }
+                                { type: 'text', text: buildPrompt() }
                             ]
                         }]
                     })
                 });
-
                 const data = await res.json();
-                if (!res.ok) {
-                    const msg = data && data.error ? data.error.message : ('HTTP ' + res.status);
-                    throw new Error(msg);
-                }
-                const text = (data.content || [])
-                    .filter(b => b.type === 'text')
-                    .map(b => b.text)
-                    .join('\n')
-                    .trim();
-                result.value = text || '(no text returned)';
-                resultCard.classList.remove('hidden');
+                if (!res.ok) throw new Error(data && data.error ? data.error.message : ('HTTP ' + res.status));
+
+                const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+                let parsed;
+                try { parsed = JSON.parse(text); } catch { throw new Error('Could not parse the model response.'); }
+                lastScan = (parsed.items || []).map(i => ({
+                    raw: i.raw || '', name: i.name || null,
+                    weight: i.weight || null, price: (i.price === 0 || i.price) ? i.price : null
+                }));
+                renderScan();
             } catch (err) {
-                result.value = 'Error: ' + err.message;
-                resultCard.classList.remove('hidden');
+                showScanError('Error: ' + err.message);
             } finally {
                 scanBtn.disabled = false;
                 scanBtn.innerHTML = original;
             }
         }
+        function showScanError(msg) { scanError.textContent = msg; scanError.classList.remove('hidden'); }
+
+        // ================= rendering scan results =================
+        function fmtPrice(p) {
+            if (p == null) return '?';
+            return Number.isInteger(p) ? p : p;
+        }
+        function fmtLine(it) {
+            const w = it.weight ? ' ' + it.weight : '';
+            return `${it.name}${w} - ${fmtPrice(it.price)} RSD`;
+        }
+        function renderScan() {
+            const matched = lastScan.filter(i => i.name);
+            const unmatched = lastScan.filter(i => !i.name);
+
+            result.value = matched.map(fmtLine).join('\n');
+            resultCard.classList.toggle('hidden', matched.length === 0);
+
+            unmatchedList.innerHTML = '';
+            unmatched.forEach((it, idx) => unmatchedList.appendChild(renderUnmatchedRow(it, idx)));
+            unmatchedCard.classList.toggle('hidden', unmatched.length === 0);
+
+            if (!matched.length && !unmatched.length) {
+                showScanError('No items were read from this receipt.');
+            }
+        }
+
+        function renderUnmatchedRow(it) {
+            const wrap = document.createElement('div');
+            wrap.className = 'unmatched-row';
+            const meta = [it.weight, it.price != null ? it.price + ' RSD' : null].filter(Boolean).join(', ');
+            wrap.innerHTML = `<div class="mb-2"><strong>${escapeHtml(it.raw)}</strong>${meta ? ` <span class="muted-help">(${meta})</span>` : ''}</div>`;
+
+            const controls = document.createElement('div');
+            controls.className = 'd-flex gap-2 flex-wrap align-items-center';
+
+            const select = document.createElement('select');
+            select.className = 'form-select form-select-sm';
+            select.style.maxWidth = '260px';
+            select.innerHTML = `<option value="">— match to an item —</option>`
+                + catalog.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')
+                + `<option value="__new">＋ Add as new item…</option>`;
+            controls.appendChild(select);
+
+            const newWrap = document.createElement('div');
+            newWrap.className = 'input-group input-group-sm hidden';
+            newWrap.style.maxWidth = '260px';
+            const newInput = document.createElement('input');
+            newInput.className = 'form-control';
+            newInput.placeholder = 'New name';
+            newInput.value = titleCase(cleanName(it.raw));
+            const newBtn = document.createElement('button');
+            newBtn.className = 'btn btn-outline-primary';
+            newBtn.textContent = 'Add';
+            newWrap.appendChild(newInput);
+            newWrap.appendChild(newBtn);
+            controls.appendChild(newWrap);
+
+            select.addEventListener('change', () => {
+                if (select.value === '__new') { newWrap.classList.remove('hidden'); newInput.focus(); }
+                else {
+                    newWrap.classList.add('hidden');
+                    if (select.value) { matchToExisting(it, select.value); }
+                }
+            });
+            newBtn.addEventListener('click', () => {
+                const name = newInput.value.trim();
+                if (!name) return;
+                addNewFromScan(it, name);
+            });
+
+            wrap.appendChild(controls);
+            return wrap;
+        }
+
+        function matchToExisting(it, catId) {
+            const item = catalog.find(c => c.id === catId);
+            if (!item) return;
+            addAlias(item, it.raw);
+            it.name = item.name;
+            persist();
+            renderScan();
+        }
+        function addNewFromScan(it, name) {
+            let item = catalog.find(c => c.name.toLowerCase() === name.toLowerCase());
+            if (!item) { item = { id: uid(), name, aliases: [] }; catalog.push(item); }
+            addAlias(item, it.raw);
+            it.name = item.name;
+            persist();
+            renderScan();
+        }
+        function addAlias(item, raw) {
+            const a = (raw || '').trim().toLowerCase();
+            if (a && !item.aliases.includes(a) && a !== item.name.toLowerCase()) item.aliases.push(a);
+        }
+
+        // ================= catalog manager =================
+        function toggleCatalog() {
+            document.getElementById('catalogBody').classList.toggle('hidden');
+            document.getElementById('catChevron').classList.toggle('fa-chevron-up');
+            document.getElementById('catChevron').classList.toggle('fa-chevron-down');
+        }
+        function addItemManual() {
+            const input = document.getElementById('newItemName');
+            const name = input.value.trim();
+            if (!name) return;
+            if (!catalog.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                catalog.push({ id: uid(), name, aliases: [] });
+                persist();
+            }
+            input.value = '';
+        }
+        function renameItem(id) {
+            const item = catalog.find(c => c.id === id);
+            if (!item) return;
+            const name = prompt('Rename item:', item.name);
+            if (name && name.trim()) { item.name = name.trim(); persist(); renderScan(); }
+        }
+        function deleteItem(id) {
+            const item = catalog.find(c => c.id === id);
+            if (item && confirm(`Delete "${item.name}" and its aliases?`)) {
+                catalog = catalog.filter(c => c.id !== id);
+                persist();
+            }
+        }
+        function removeAlias(id, alias) {
+            const item = catalog.find(c => c.id === id);
+            if (item) { item.aliases = item.aliases.filter(a => a !== alias); persist(); }
+        }
+        function renderCatalog() {
+            document.getElementById('catCount').textContent = catalog.length;
+            const list = document.getElementById('catalogList');
+            if (!catalog.length) {
+                list.innerHTML = `<div class="muted-help">No items yet. Add some, or scan a receipt and reconcile.</div>`;
+                return;
+            }
+            list.innerHTML = '';
+            catalog.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(it => {
+                const row = document.createElement('div');
+                row.className = 'cat-item';
+                const aliases = (it.aliases || []).map(a =>
+                    `<span class="alias-chip">${escapeHtml(a)} <i class="fa-solid fa-xmark" style="cursor:pointer" onclick="removeAlias('${it.id}','${escapeAttr(a)}')"></i></span>`).join('');
+                row.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>${escapeHtml(it.name)}</strong>
+                            <div>${aliases || '<span class="muted-help">no aliases yet</span>'}</div>
+                        </div>
+                        <div class="text-nowrap">
+                            <button class="copy-btn" title="Rename" onclick="renameItem('${it.id}')"><i class="fa-solid fa-pen"></i></button>
+                            <button class="copy-btn text-danger" title="Delete" onclick="deleteItem('${it.id}')"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>`;
+                list.appendChild(row);
+            });
+        }
+
+        // ================= helpers =================
+        function cleanName(raw) {
+            return (raw || '').replace(/\d+\s?(g|kg|ml|l|kom|x)\b/gi, ' ').replace(/[×x*]/g, ' ')
+                .replace(/\s+/g, ' ').trim();
+        }
+        function titleCase(s) {
+            return s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        }
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function escapeAttr(s) { return (s || '').replace(/'/g, "\\'"); }
 
         async function copyResult() {
-            try {
-                await navigator.clipboard.writeText(result.value);
-            } catch {
-                result.select();
-                document.execCommand('copy');
-            }
+            try { await navigator.clipboard.writeText(result.value); }
+            catch { result.select(); document.execCommand('copy'); }
             const label = document.getElementById('copyLabel');
             label.textContent = 'Copied!';
             setTimeout(() => label.textContent = 'Copy', 1500);
         }
+
+        // ================= sync UI (talks to window.__cloud) =================
+        function createCode() {
+            if (!window.__cloud) return;
+            window.__cloud.createCode().then(code => { if (code) alert('Your sync code: ' + code + '\nEnter it on your other device.'); });
+        }
+        function joinCode() {
+            if (!window.__cloud) return;
+            const code = document.getElementById('joinCode').value.trim();
+            window.__cloud.connect(code).then(r => {
+                if (!r.ok) alert('Could not join: ' + r.error);
+                else document.getElementById('joinCode').value = '';
+            });
+        }
+        function disconnectSync() { if (window.__cloud) window.__cloud.disconnect(); }
+
+        window.__onSyncStatus = function (st) {
+            const dot = document.getElementById('syncDot');
+            const label = document.getElementById('syncStatus');
+            const controls = document.getElementById('syncControls');
+            const disc = document.getElementById('disconnectBtn');
+            if (!st.available) { label.textContent = 'Sync unavailable'; controls.classList.add('hidden'); return; }
+            controls.classList.remove('hidden');
+            if (st.connected) {
+                dot.classList.add('on');
+                label.textContent = 'Synced — code ' + st.code;
+                disc.classList.remove('hidden');
+            } else {
+                dot.classList.remove('on');
+                label.textContent = 'Not synced (this device only)';
+                disc.classList.add('hidden');
+            }
+        };
+
+        renderCatalog();
+    </script>
+
+    <!-- Firebase device sync (same project as the travel app, separate collection) -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp }
+            from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBpzQJgA0la8m9J7ixUDGf43OxnRCogI9g",
+            authDomain: "travelapp-8b457.firebaseapp.com",
+            projectId: "travelapp-8b457",
+            storageBucket: "travelapp-8b457.firebasestorage.app",
+            messagingSenderId: "635667620374",
+            appId: "1:635667620374:web:aa2027d4d1ae131a554b37"
+        };
+        const COLLECTION = 'receiptcatalogs';
+        const configured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
+
+        let db = null, unsub = null, currentCode = null, pushTimer = null;
+
+        function status() { return { available: configured, connected: !!currentCode, code: currentCode }; }
+        function notify() { if (window.__onSyncStatus) window.__onSyncStatus(status()); }
+
+        function randomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            const arr = new Uint32Array(8); crypto.getRandomValues(arr);
+            let code = ''; for (let i = 0; i < 8; i++) code += chars[arr[i] % chars.length];
+            return code;
+        }
+        function subscribe(code) {
+            if (unsub) unsub();
+            unsub = onSnapshot(doc(db, COLLECTION, code), snap => {
+                if (snap.metadata.hasPendingWrites) return;
+                const data = snap.data();
+                if (data && Array.isArray(data.catalog) && window.__applyRemoteCatalog) window.__applyRemoteCatalog(data.catalog);
+            }, err => console.error('Sync listener error:', err));
+            currentCode = code;
+            localStorage.setItem('receipt_syncCode', code);
+            notify();
+        }
+
+        window.__cloud = {
+            getStatus: status,
+            async createCode() {
+                if (!configured) return null;
+                const code = randomCode();
+                const catalog = (window.__getLocalCatalog && window.__getLocalCatalog()) || [];
+                await setDoc(doc(db, COLLECTION, code), { catalog, updatedAt: serverTimestamp() });
+                subscribe(code);
+                return code;
+            },
+            async connect(codeRaw) {
+                if (!configured) return { ok: false, error: 'not_configured' };
+                const code = (codeRaw || '').trim().toUpperCase();
+                if (!code) return { ok: false, error: 'empty' };
+                try {
+                    const ref = doc(db, COLLECTION, code);
+                    const snap = await getDoc(ref);
+                    if (!snap.exists()) return { ok: false, error: 'not_found' };
+                    subscribe(code);
+                    const data = snap.data();
+                    if (data && Array.isArray(data.catalog) && window.__applyRemoteCatalog) window.__applyRemoteCatalog(data.catalog);
+                    return { ok: true };
+                } catch (e) { console.error('Sync connect error:', e); return { ok: false, error: 'network' }; }
+            },
+            disconnect() {
+                if (unsub) { unsub(); unsub = null; }
+                currentCode = null;
+                localStorage.removeItem('receipt_syncCode');
+                notify();
+            },
+            push(catalog) {
+                if (!configured || !currentCode) return;
+                clearTimeout(pushTimer);
+                pushTimer = setTimeout(() => {
+                    setDoc(doc(db, COLLECTION, currentCode), { catalog, updatedAt: serverTimestamp() })
+                        .catch(e => console.error('Sync push error:', e));
+                }, 500);
+            }
+        };
+
+        if (configured) {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            const saved = localStorage.getItem('receipt_syncCode');
+            if (saved) subscribe(saved);
+        }
+        notify();
     </script>
 </body>
 
