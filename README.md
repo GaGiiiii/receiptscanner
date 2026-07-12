@@ -1,31 +1,33 @@
 # Receipt Scanner
 
-A simple, single-file receipt-reading web app. Vanilla JavaScript + Bootstrap 5, no build step — everything lives in `index.html`. Hosted as a static site on GitHub Pages. It takes a receipt photo (upload or camera), reads it **entirely in your browser** with OCR, and lists each item and its price in a copyable text box. Nothing is uploaded or saved.
+A simple, single-file receipt-reading web app. Vanilla JavaScript + Bootstrap 5, no build step — everything lives in `index.html`. Hosted as a static site on GitHub Pages. It takes a receipt photo (upload or camera) and uses **Claude vision** to list each item and its price in a copyable text box. Nothing is uploaded to any server of ours or saved anywhere.
 
 **Live app:** <https://gagiiiii.github.io/receiptscanner/>
 
 ## Features
 
 - **Two ways to add a receipt** — **Upload** an image file, or use the **Camera** (opens the rear camera on phones via `capture="environment"`).
-- **On-device OCR** — text recognition runs 100% in the browser with [Tesseract.js](https://tesseract.projectnaptha.com/); no server, no API key, no account.
-- **Item + price parsing** — each detected line is split into an aligned `item        price` list. Handles both `12.99` and `12,99` (and thousands separators).
+- **Claude vision reading** — the image is sent directly from your browser to the Anthropic API, which reads receipts far more accurately than on-device OCR and returns clean `item — price` lines.
 - **Editable result** — the output lands in a textarea you can tweak before copying.
 - **One-tap copy** — copy the whole list to the clipboard.
-- **Raw text toggle** — switch between the parsed list and the full raw OCR text, in case parsing misses a line.
-- **Progress feedback** — a progress bar shows OCR status while the image is read.
+- **Cost-aware** — images are downscaled to ~1600px in the browser before sending, keeping token usage (and cost) low.
 
-## Privacy & storage
+## API key & privacy
 
-- **No persistence.** Images never leave your device and nothing is stored — no `localStorage`, no backend, no uploads.
-- Everything happens client-side; closing the tab discards all data.
+- You supply your own **Anthropic API key** (from <https://console.anthropic.com>). Enter it in the app; the **Save** button stores it only in your browser's `localStorage` on this device.
+- The key is **never** committed to this repo or sent anywhere except directly to `api.anthropic.com` when you scan.
+- Because a static site can't hide a key, this is intended for **personal use**. To share the app publicly, put a small serverless proxy (e.g. a Cloudflare Worker) in front of the API so the key stays server-side.
+- No receipts are stored — the image lives in the tab only until you close it.
+
+## Cost
+
+Uses **Claude Haiku 4.5** (`claude-haiku-4-5`), the cheapest capable vision model — roughly **$0.001–0.003 per receipt**, so ~300–1,000 scans per $1. For maximum accuracy, change `MODEL` in `index.html` to `claude-opus-4-8` (higher cost).
 
 ## How it works
 
-1. Pick or snap a receipt → a preview appears.
-2. Tap **Scan receipt** → Tesseract.js recognizes the text in-browser.
-3. Each line ending in a price is turned into an `item — price` row; the rest becomes the raw-text view.
-
-> **Accuracy note:** OCR works best on crisp, flat, well-lit receipts. Faded thermal paper, curled receipts, or tight columns can produce misreads — use the raw-text toggle and edit the box as needed.
+1. Enter your API key (once — Save remembers it on this device).
+2. Pick or snap a receipt → a preview appears.
+3. Tap **Scan receipt** → the browser downscales the image, sends it to the Anthropic Messages API with `anthropic-dangerous-direct-browser-access: true`, and shows the returned item/price list.
 
 ## Hosting
 
@@ -44,6 +46,6 @@ python3 -m http.server 8000
 
 ## Tech
 
-- [Tesseract.js](https://tesseract.projectnaptha.com/) — in-browser OCR
+- [Anthropic Claude API](https://docs.claude.com/) — vision model reads the receipt
 - [Bootstrap 5](https://getbootstrap.com/) — layout
 - [Font Awesome](https://fontawesome.com/) — icons
