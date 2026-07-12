@@ -342,12 +342,13 @@
                     type: 'array',
                     items: {
                         type: 'object', additionalProperties: false,
-                        required: ['raw', 'name', 'weight', 'price'],
+                        required: ['raw', 'name', 'weight', 'unitPrice', 'quantity'],
                         properties: {
                             raw: { type: 'string' },
                             name: { type: ['string', 'null'] },
                             weight: { type: ['string', 'null'] },
-                            price: { type: ['number', 'null'] }
+                            unitPrice: { type: ['number', 'null'] },
+                            quantity: { type: ['number', 'null'] }
                         }
                     }
                 }
@@ -360,7 +361,8 @@ Extract every purchased line item. For each item return:
 - "raw": the item text exactly as printed on the receipt.
 - "name": match the item to ONE canonical name from the catalog below, using the names, their aliases, AND meaning (e.g. "Orbit strong mints" and "Orbit mints" both mean "Orbit Bombone"). Copy the catalog name EXACTLY as written. If nothing in the catalog fits, set "name" to null.
 - "weight": the size/weight if present (e.g. "150g", "1kg", "0.5l"), else null.
-- "price": the line total for that item, as a number in dinars (no currency text), else null.
+- "unitPrice": the price of a SINGLE unit of the item, as a number in dinars (no currency text). If the receipt only shows a line total for several units, divide by the quantity to get the per-unit price. Null if unknown.
+- "quantity": how many units of the item were bought, as an integer (default 1).
 
 Only match to a name that is actually in the catalog. Do not invent catalog names. Ignore totals, tax, change, and store info.
 
@@ -409,7 +411,9 @@ ${catalogForPrompt()}`;
                 try { parsed = JSON.parse(text); } catch { throw new Error('Could not parse the model response.'); }
                 lastScan = (parsed.items || []).map(i => ({
                     raw: i.raw || '', name: i.name || null,
-                    weight: i.weight || null, price: (i.price === 0 || i.price) ? i.price : null
+                    weight: i.weight || null,
+                    unitPrice: (i.unitPrice === 0 || i.unitPrice) ? i.unitPrice : null,
+                    quantity: i.quantity && i.quantity > 1 ? Math.round(i.quantity) : 1
                 }));
                 renderScan();
             } catch (err) {
@@ -423,12 +427,12 @@ ${catalogForPrompt()}`;
 
         // ================= rendering scan results =================
         function fmtPrice(p) {
-            if (p == null) return '?';
-            return Number.isInteger(p) ? p : p;
+            return p == null ? '?' : Math.ceil(p);   // round up to whole dinars
         }
         function fmtLine(it) {
             const w = it.weight ? ' ' + it.weight : '';
-            return `${it.name}${w} - ${fmtPrice(it.price)} RSD`;
+            const q = it.quantity > 1 ? ' x' + it.quantity : '';
+            return `${it.name}${w} - ${fmtPrice(it.unitPrice)} RSD${q}`;
         }
         function renderScan() {
             const matched = lastScan.filter(i => i.name);
@@ -449,7 +453,11 @@ ${catalogForPrompt()}`;
         function renderUnmatchedRow(it) {
             const wrap = document.createElement('div');
             wrap.className = 'unmatched-row';
-            const meta = [it.weight, it.price != null ? it.price + ' RSD' : null].filter(Boolean).join(', ');
+            const meta = [
+                it.weight,
+                it.unitPrice != null ? Math.ceil(it.unitPrice) + ' RSD' : null,
+                it.quantity > 1 ? 'x' + it.quantity : null
+            ].filter(Boolean).join(', ');
             wrap.innerHTML = `<div class="mb-2"><strong>${escapeHtml(it.raw)}</strong>${meta ? ` <span class="muted-help">(${meta})</span>` : ''}</div>`;
 
             const controls = document.createElement('div');
