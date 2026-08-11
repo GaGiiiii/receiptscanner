@@ -468,7 +468,7 @@ ${catalogForPrompt()}`;
             select.className = 'form-select form-select-sm';
             select.style.maxWidth = '260px';
             select.innerHTML = `<option value="">— match to an item —</option>`
-                + catalog.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')
+                + catalog.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')
                 + `<option value="__new">＋ Add as new item…</option>`;
             controls.appendChild(select);
 
