@@ -46,6 +46,24 @@ Your catalog syncs across devices with a **sync code** (Firebase Firestore):
 
 To point it at your own backend, paste your `firebaseConfig` into the marked block in `index.html` and add Firestore security rules that restrict reads/writes to your sync-code documents.
 
+## Google Drive backup
+
+A manual backup of your item list to your *own* Google Drive, saved as `receiptscanner-backup.json`.
+Off until an OAuth client ID is configured:
+
+1. In the [Google Cloud console](https://console.cloud.google.com) for the same project as Firebase, enable the **Google Drive API**.
+2. Configure the **OAuth consent screen** (External). The only scope needed is `drive.file`, which is *non-sensitive*, so publishing does not require Google's verification review.
+3. Create credentials → **OAuth client ID** → *Web application*, and add `https://<user>.github.io` as an authorized JavaScript origin (add `http://localhost:8000` too if you want it while developing).
+4. Paste the client ID into the marked block in the Drive script near the bottom of `index.html`.
+5. Open **My item list** → **Back up to Google Drive**.
+
+**Backup is manual, by design.** The browser-only OAuth flow yields a ~1-hour access token and no refresh token, so the app cannot back up on a schedule or while it is closed — that would need a server holding long-lived credentials. The button is the whole feature.
+
+Notes:
+- The `drive.file` scope means the app can only ever see files it created itself, never the rest of your Drive.
+- OAuth requires an https origin, so backup is disabled when `index.html` is opened as a local file (unlike Firebase sync, which still works there).
+- There is **one** backup file, overwritten each time — no version history. Restoring replaces your whole item list, then pushes to any paired devices.
+
 ## API key & privacy
 
 - You supply your own **Anthropic API key** (from <https://console.anthropic.com>). Enter it in the app; **Save** stores it only in this browser's `localStorage`.
