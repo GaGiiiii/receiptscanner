@@ -252,6 +252,7 @@
                         onclick="driveAskRestore()">Restore</button>
                 </div>
                 <div id="driveRestoreConfirm" class="hidden mt-2 p-2 border rounded">
+                    <div id="driveRestoreWhen" class="muted-help mb-1"></div>
                     <div class="muted-help text-danger mb-2">This replaces your whole item list with the backup.</div>
                     <div class="d-flex gap-2">
                         <button class="btn btn-sm btn-danger" onclick="driveRestore()">Restore</button>
@@ -698,7 +699,16 @@ ${catalogForPrompt()}`;
             el.textContent = text;
             el.className = 'muted-help mt-2 ' + (ok ? 'text-success' : 'text-danger');
         }
-        function driveAskRestore() {
+        // Look the backup up first, so an empty Drive reports that instead of making the
+        // user confirm a destructive action that would have had nothing to restore.
+        async function driveAskRestore() {
+            if (!window.__drive) return;
+            driveMessage('Checking for a backup…', true);
+            const res = await window.__drive.check();
+            if (!res.ok) { driveMessage(driveErrorText(res.error), false); return; }
+            document.getElementById('driveMessage').className = 'muted-help mt-2 hidden';
+            document.getElementById('driveRestoreWhen').textContent =
+                'Backup from ' + new Date(res.savedAt).toLocaleString() + '.';
             document.getElementById('driveRestoreConfirm').classList.remove('hidden');
         }
         function driveCancelRestore() {
@@ -986,6 +996,23 @@ ${catalogForPrompt()}`;
                         return { ok: false, error: e.message || 'failed' };
                     } finally { busy = false; notify(); }
                 },
+                // Looks the backup up without touching local data, so the UI can skip the
+                // "this replaces everything" confirm when there is nothing to restore.
+                async check() {
+                    const st = status();
+                    if (!st.available) return { ok: false, error: st.reason };
+                    if (busy) return { ok: false, error: 'busy' };
+                    busy = true; notify();
+                    try {
+                        const file = await findFile();
+                        if (!file) return { ok: false, error: 'no_backup' };
+                        return { ok: true, savedAt: file.modifiedTime };
+                    } catch (e) {
+                        console.error('Drive check error:', e);
+                        return { ok: false, error: e.message || 'failed' };
+                    } finally { busy = false; notify(); }
+                },
+
                 // Replaces the local item list with the backup file's contents.
                 async restore() {
                     const st = status();
